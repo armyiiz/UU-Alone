@@ -1,0 +1,12 @@
+Card Name (ชื่อ),จำนวน,Card Type,Image URL (รูปภาพ),Thai Translation
+Angelic Baby Unicorn,1,Baby Unicorn,,หากการ์ดใบนี้กำลังจะถูกทำลายหรือถูกสังเวย คุณสามารถกลับขึ้นมือแทนได้
+Baby Unicorn,10,Baby Unicorn,,ลูกยูนิคอร์น ไม่มีผลอะไร
+Basic Unicorn 1,5,Basic Unicorn,,ม้ายูนิคอร์นพื้นฐาน ไม่มีผลอะไร
+Basic Unicorn 2,5,Basic Unicorn,,ม้ายูนิคอร์นพื้นฐาน ไม่มีผลอะไร
+Basic Unicorn 3,5,Basic Unicorn,,ม้ายูนิคอร์นพื้นฐาน ไม่มีผลอะไร
+Magical Unicorn 1,2,Magical Unicorn,,เมื่อการ์ดใบนี้เข้ามาในสนาม จั่ว 1 ใบ
+Magical Unicorn 2,2,Magical Unicorn,,เมื่อการ์ดใบนี้เข้ามาในสนาม ทิ้ง 1 ใบ
+Neigh,4,Instant,,หยุดการเล่นการ์ด
+Destroy 1,3,Magic,,ทำลายการ์ด 1 ใบ
+Sacrifice 1,3,Downgrade,,ผู้เล่นต้องสังเวยการ์ด 1 ใบ
+Upgrade 1,3,Upgrade,,เมื่อการ์ดนี้อยู่ในสนาม จั่วเพิ่ม 1 ใบทุกเทิร์น
