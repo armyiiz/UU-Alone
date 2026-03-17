@@ -23,12 +23,36 @@ export const CardEffects = {
     onCardPlayed: (gameState, payload) => {
        // Apply global modifier
        if (payload.card.name === "Catastrophe") {
-          // It's a Downgrade. In gameStore.playCard, it's added to the opponent's downgrades.
-          // Therefore, the target is the person whose downgrades array it is in.
-          // For now, let's just make the target Player if Bot played it, and vice versa.
-          const opponent = payload.targetPlayer === 'player' ? 'bot' : 'player';
+          // It's a Downgrade. In executePlayLogic, it's added to the opponent's downgrades.
+          const opponent = payload.sourcePlayer === 'player' ? 'bot' : 'player';
           gameState.modifiers[opponent].unicornsAreCats = true;
        }
+    }
+  },
+
+  // Dummy Targeted Destroy Magic Card (For Testing the Targeting System)
+  "Targeted Destroy (Test)": {
+    requiresTarget: true,
+    isValidTarget: (targetCard, targetOwner, state) => {
+      // Valid target is an opponent's Unicorn
+      const { pendingAction } = state;
+      if (!pendingAction) return false;
+      const opponent = pendingAction.sourcePlayer === 'player' ? 'bot' : 'player';
+
+      // Must target the opponent's card, and it must be a Unicorn in the stable
+      return targetOwner === opponent && targetCard.type.includes('Unicorn');
+    },
+    onCardPlayed: (gameState, payload) => {
+      // payload has targetId. We need to find and destroy it.
+      if (!payload.targetId) return;
+      const opponent = payload.sourcePlayer === 'player' ? 'bot' : 'player';
+
+      const targetCard = gameState[opponent].stable.find(c => c.instanceId === payload.targetId);
+      if (targetCard) {
+        // Find and remove from location
+        gameState[opponent].stable = gameState[opponent].stable.filter(c => c.instanceId !== targetCard.instanceId);
+        gameState.discardPile.push(targetCard);
+      }
     }
   }
 };

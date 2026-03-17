@@ -19,6 +19,7 @@ export const useGameStore = create(
       player: { unicornsAreCats: false },
       bot: { unicornsAreCats: false },
     },
+    pendingAction: null, // { sourcePlayer: 'player', card: { ... } }
     loading: true,
     winner: null,
 
@@ -112,31 +113,78 @@ export const useGameStore = create(
        }
     },
 
-    playCard: (targetPlayer, cardToPlay) => {
-      set((state) => {
-        // Remove from hand
-        state[targetPlayer].hand = state[targetPlayer].hand.filter(c => c.instanceId !== cardToPlay.instanceId);
+    playCard: (sourcePlayer, cardToPlay, targetId = null) => {
+      // Check if the card requires a target
+      const requiresTarget = CardEffects[cardToPlay.name]?.requiresTarget;
 
-        // Step 1 default logic for Unicorns vs others
+      if (requiresTarget && !targetId) {
+        // Player needs to select a target. Put it in limbo.
+        set((state) => {
+          state[sourcePlayer].hand = state[sourcePlayer].hand.filter(c => c.instanceId !== cardToPlay.instanceId);
+          state.pendingAction = { sourcePlayer, card: cardToPlay };
+        });
+        return { requiresTarget: true }; // Signal to UI
+      }
+
+      // If we have a targetId (Bot) or it doesn't require a target, proceed
+      get().executePlayLogic(sourcePlayer, cardToPlay, targetId);
+      return { requiresTarget: false };
+    },
+
+    executePlayLogic: (sourcePlayer, cardToPlay, targetId = null) => {
+      set((state) => {
+        // Ensure it's removed from hand (if it wasn't already in pendingAction)
+        state[sourcePlayer].hand = state[sourcePlayer].hand.filter(c => c.instanceId !== cardToPlay.instanceId);
+
         if (cardToPlay.type.includes('Unicorn')) {
-          state[targetPlayer].stable.push(cardToPlay);
-        } else if (cardToPlay.type === 'Downgrade') {
-          // For now, if a player plays a downgrade, it applies to the opponent
-          const opponent = targetPlayer === 'player' ? 'bot' : 'player';
-          state[opponent].downgrades.push(cardToPlay);
+          state[sourcePlayer].stable.push(cardToPlay);
         } else if (cardToPlay.type === 'Upgrade') {
-          state[targetPlayer].upgrades.push(cardToPlay);
+          state[sourcePlayer].upgrades.push(cardToPlay);
+        } else if (cardToPlay.type === 'Downgrade') {
+          const opponent = sourcePlayer === 'player' ? 'bot' : 'player';
+          state[opponent].downgrades.push(cardToPlay);
         } else {
-          // Instants/Magic go straight to discard for now (if not handled by effect)
           state.discardPile.push(cardToPlay);
         }
       });
 
       // Trigger onCardPlayed Event
-      get().triggerEvent('onCardPlayed', { card: cardToPlay, targetPlayer });
+      get().triggerEvent('onCardPlayed', { card: cardToPlay, sourcePlayer, targetId });
 
       // Update Win Condition
       get().checkWinCondition();
+    },
+
+    cancelPendingAction: () => {
+      set((state) => {
+        if (state.pendingAction) {
+          const { sourcePlayer, card } = state.pendingAction;
+          state[sourcePlayer].hand.push(card);
+          state.pendingAction = null;
+        }
+      });
+    },
+
+    resolvePendingAction: (targetCard, targetOwner) => {
+      const state = get();
+      if (!state.pendingAction) return false;
+
+      const { sourcePlayer, card } = state.pendingAction;
+      const effectDef = CardEffects[card.name];
+
+      // Validate Target
+      if (effectDef?.isValidTarget) {
+         if (!effectDef.isValidTarget(targetCard, targetOwner, state)) {
+            // Invalid target, do nothing (UI can play a sound/shake)
+            return false;
+         }
+      }
+
+      // Valid target! Clear pending action and execute play logic
+      set((state) => { state.pendingAction = null; });
+      get().executePlayLogic(sourcePlayer, card, targetCard.instanceId);
+
+      return true; // Signal success to UI to advance phase
     },
 
     discardCard: (targetPlayer, cardToDiscard) => {
