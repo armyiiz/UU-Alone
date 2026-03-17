@@ -26,9 +26,11 @@ export const evaluateBotAction = (gameState) => {
   if (playerUnicorns >= 5) {
      const downgradeCard = botHand.find(c => c.type === 'Downgrade' || c.effectText?.includes('Destroy'));
      if (downgradeCard) {
-       // Since target logic isn't fully implemented in step 1 UI, we will just 'play' it and
-       // let the default playCard logic put it in player's downgrade or discard.
-       return { action: 'play', card: downgradeCard };
+       // Find the best target (just grab the first player unicorn for now)
+       const bestTarget = player.stable.find(c => c.type.includes('Unicorn'));
+       if (bestTarget) {
+         return { action: 'play', card: downgradeCard, targetId: bestTarget.instanceId };
+       }
      }
   }
 

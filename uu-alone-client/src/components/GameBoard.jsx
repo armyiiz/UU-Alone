@@ -18,9 +18,12 @@ export default function GameBoard() {
     drawCard,
     advancePhase,
     playCard,
+    cancelPendingAction,
+    resolvePendingAction,
     discardCard,
     destroyCard,
-    sacrificeCard
+    sacrificeCard,
+    pendingAction
   } = useGameStore();
 
   useEffect(() => {
@@ -40,9 +43,22 @@ export default function GameBoard() {
   const handlePlayerPlayCard = (cardToPlay) => {
     if (turnState.currentPlayer !== 'player' || turnState.phase !== 'action') return;
 
-    // Remove old limitation and let the game engine handle it
-    playCard('player', cardToPlay);
-    advancePhase();
+    const result = playCard('player', cardToPlay);
+    if (!result.requiresTarget) {
+       advancePhase();
+    }
+  };
+
+  const handleCardClick = (targetCard, targetOwner) => {
+     if (pendingAction) {
+        const success = resolvePendingAction(targetCard, targetOwner);
+        if (success) {
+           advancePhase();
+        } else {
+           // Invalid target feedback could go here (e.g. sound/shake)
+           console.log("Invalid target selected");
+        }
+     }
   };
 
   const handlePlayerActionDraw = () => {
@@ -169,6 +185,24 @@ export default function GameBoard() {
       {/* RIGHT PANEL: Main Game Board (75% Width) */}
       <div className="w-3/4 h-full flex flex-col relative bg-slate-900">
 
+        {/* Pending Action Overlay */}
+        {pendingAction && pendingAction.sourcePlayer === 'player' && (
+           <div className="absolute inset-0 z-50 bg-black/60 flex flex-col items-center justify-center backdrop-blur-[2px]">
+              <div className="text-3xl font-bold text-yellow-400 mb-4 animate-pulse tracking-wider shadow-black drop-shadow-md">
+                 Select a Target...
+              </div>
+              <div className="h-48 mb-6">
+                 <Card card={pendingAction.card} className="pointer-events-none shadow-2xl scale-125" />
+              </div>
+              <button
+                onClick={cancelPendingAction}
+                className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded shadow-lg transition"
+              >
+                 Cancel Play
+              </button>
+           </div>
+        )}
+
         {/* TOP AREA: Bot's Side (30vh) */}
         <div className="h-[30vh] border-b border-slate-700 p-2 flex flex-col justify-between">
            <div className="flex justify-between items-center text-xs text-red-400 px-4">
@@ -196,7 +230,7 @@ export default function GameBoard() {
                     <div className="flex gap-1 h-[8vh] justify-center items-end opacity-80">
                       {bot.upgrades.map(c => (
                         <div key={c.instanceId} className="h-full">
-                           <Card card={c} onContextMenu={setInspectCard} />
+                           <Card card={c} onClick={() => handleCardClick(c, 'bot')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-red-400 cursor-crosshair" : ""} />
                         </div>
                       ))}
                     </div>
@@ -205,7 +239,7 @@ export default function GameBoard() {
                   <div className="flex gap-2 h-[12vh] justify-center items-center">
                     {bot.stable.map(c => (
                       <div key={c.instanceId} className="h-full">
-                         <Card card={c} onContextMenu={setInspectCard} />
+                         <Card card={c} onClick={() => handleCardClick(c, 'bot')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-red-400 cursor-crosshair" : ""} />
                       </div>
                     ))}
                   </div>
@@ -214,7 +248,7 @@ export default function GameBoard() {
                     <div className="flex gap-1 h-[8vh] justify-center items-start opacity-80 filter sepia-[.3]">
                       {bot.downgrades.map(c => (
                         <div key={c.instanceId} className="h-full">
-                           <Card card={c} onContextMenu={setInspectCard} />
+                           <Card card={c} onClick={() => handleCardClick(c, 'bot')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-red-400 cursor-crosshair" : ""} />
                         </div>
                       ))}
                     </div>
@@ -325,7 +359,7 @@ export default function GameBoard() {
                     <div className="flex gap-2 h-[10vh] justify-center items-end w-full opacity-90">
                       {player.upgrades.map(c => (
                         <div key={c.instanceId} className="h-full">
-                           <Card card={c} onContextMenu={setInspectCard} />
+                           <Card card={c} onClick={() => handleCardClick(c, 'player')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-green-400 cursor-crosshair" : ""} />
                         </div>
                       ))}
                     </div>
@@ -334,7 +368,7 @@ export default function GameBoard() {
                   <div className="flex gap-3 h-[16vh] justify-center items-center w-full">
                     {player.stable.map(c => (
                       <div key={c.instanceId} className="h-full hover:scale-105 transition-transform duration-200">
-                         <Card card={c} onContextMenu={setInspectCard} />
+                         <Card card={c} onClick={() => handleCardClick(c, 'player')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-green-400 cursor-crosshair" : ""} />
                       </div>
                     ))}
                   </div>
@@ -343,7 +377,7 @@ export default function GameBoard() {
                     <div className="flex gap-2 h-[10vh] justify-center items-start w-full opacity-90 filter sepia-[.3]">
                       {player.downgrades.map(c => (
                         <div key={c.instanceId} className="h-full">
-                           <Card card={c} onContextMenu={setInspectCard} />
+                           <Card card={c} onClick={() => handleCardClick(c, 'player')} onContextMenu={setInspectCard} className={pendingAction ? "hover:ring-2 hover:ring-green-400 cursor-crosshair" : ""} />
                         </div>
                       ))}
                     </div>
