@@ -1,113 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { parseDeckCSV } from '../utils/deckParser';
 import Card from './Card';
+import { useGameStore } from '../store/gameStore';
+import { evaluateBotAction } from '../utils/aiDecision';
 
 export default function GameBoard() {
-  const [deck, setDeck] = useState([]);
-  const [discardPile, setDiscardPile] = useState([]);
-  const [nursery, setNursery] = useState([]);
+  const {
+    deck,
+    discardPile,
+    nursery,
+    player,
+    bot,
+    turnState,
+    modifiers,
+    loading,
+    winner,
+    initializeGame,
+    drawCard,
+    advancePhase,
+    playCard,
+    discardCard,
+    destroyCard,
+    sacrificeCard
+  } = useGameStore();
 
-  const [player, setPlayer] = useState({ hand: [], stable: [], downgrades: [], upgrades: [] });
-  const [bot, setBot] = useState({ hand: [], stable: [], downgrades: [], upgrades: [] });
-
-  const [turnState, setTurnState] = useState({
-    currentPlayer: 'player', // 'player' | 'bot'
-    phase: 'beginning', // 'beginning' | 'draw' | 'action' | 'end'
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [winner, setWinner] = useState(null);
-
-  // Initialization
   useEffect(() => {
-    const initializeGame = async () => {
-      try {
-        const { deck: parsedDeck, nursery: parsedNursery } = await parseDeckCSV();
-
-        let currentDeck = [...parsedDeck];
-        let currentNursery = [...parsedNursery];
-
-        // 1. Assign Baby Unicorns
-        const playerBaby = currentNursery.pop();
-        const botBaby = currentNursery.pop();
-
-        // 2. Draw Starting Hands (5 cards each)
-        const playerHand = [];
-        const botHand = [];
-
-        for (let i = 0; i < 5; i++) {
-          if (currentDeck.length > 0) playerHand.push(currentDeck.pop());
-          if (currentDeck.length > 0) botHand.push(currentDeck.pop());
-        }
-
-        setNursery(currentNursery);
-        setDeck(currentDeck);
-
-        setPlayer({
-          hand: playerHand,
-          stable: playerBaby ? [playerBaby] : [],
-          downgrades: [],
-          upgrades: []
-        });
-
-        setBot({
-          hand: botHand,
-          stable: botBaby ? [botBaby] : [],
-          downgrades: [],
-          upgrades: []
-        });
-
-        setLoading(false);
-        setTurnState({ currentPlayer: 'player', phase: 'beginning' });
-
-      } catch (error) {
-        console.error("Error initializing game:", error);
-      }
-    };
-
     initializeGame();
-  }, []);
+  }, [initializeGame]);
 
-  // Win Condition Check
-  useEffect(() => {
-    const checkWinCondition = () => {
-      if (player.stable.filter(card => card.type.includes('Unicorn')).length >= 7) {
-        setWinner('Player');
-      } else if (bot.stable.filter(card => card.type.includes('Unicorn')).length >= 7) {
-        setWinner('Bot');
-      }
-    };
-    checkWinCondition();
-  }, [player.stable, bot.stable]);
-
-
-  const drawCard = (targetPlayer) => {
-    if (deck.length === 0) return; // Reshuffle logic can be added later
-
-    const newDeck = [...deck];
-    const drawnCard = newDeck.pop();
-    setDeck(newDeck);
-
-    if (targetPlayer === 'player') {
-      setPlayer(prev => ({ ...prev, hand: [...prev.hand, drawnCard] }));
-    } else {
-      setBot(prev => ({ ...prev, hand: [...prev.hand, drawnCard] }));
-    }
-  };
-
-  const advancePhase = () => {
-    setTurnState(prev => {
-      switch (prev.phase) {
-        case 'beginning': return { ...prev, phase: 'draw' };
-        case 'draw': return { ...prev, phase: 'action' };
-        case 'action': return { ...prev, phase: 'end' };
-        case 'end':
-          // Switch player
-          return { currentPlayer: prev.currentPlayer === 'player' ? 'bot' : 'player', phase: 'beginning' };
-        default: return prev;
-      }
-    });
-  };
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [inspectCard, setInspectCard] = useState(null);
 
   // --- Player Actions ---
   const handlePlayerDrawPhase = () => {
@@ -119,19 +40,9 @@ export default function GameBoard() {
   const handlePlayerPlayCard = (cardToPlay) => {
     if (turnState.currentPlayer !== 'player' || turnState.phase !== 'action') return;
 
-    // For Step 1: Only allow playing Unicorns to the stable.
-    if (cardToPlay.type.includes('Unicorn')) {
-      // Remove from hand
-      setPlayer(prev => ({
-        ...prev,
-        hand: prev.hand.filter(c => c.instanceId !== cardToPlay.instanceId),
-        stable: [...prev.stable, cardToPlay]
-      }));
-      advancePhase(); // Action taken, move to end phase
-    } else {
-       // Placeholder for non-unicorn logic or discard as action
-       alert("In Step 1, you can only play Unicorns as your action.");
-    }
+    // Remove old limitation and let the game engine handle it
+    playCard('player', cardToPlay);
+    advancePhase();
   };
 
   const handlePlayerActionDraw = () => {
@@ -142,12 +53,7 @@ export default function GameBoard() {
 
   const handlePlayerDiscard = (cardToDiscard) => {
     if (turnState.currentPlayer !== 'player' || turnState.phase !== 'end') return;
-
-    setPlayer(prev => {
-      const newHand = prev.hand.filter(c => c.instanceId !== cardToDiscard.instanceId);
-      setDiscardPile([...discardPile, cardToDiscard]);
-      return { ...prev, hand: newHand };
-    });
+    discardCard('player', cardToDiscard);
   };
 
   const handlePlayerEndPhaseReady = () => {
@@ -159,8 +65,15 @@ export default function GameBoard() {
     advancePhase(); // Ends turn
   };
 
-  const [selectedCard, setSelectedCard] = useState(null);
-  const [inspectCard, setInspectCard] = useState(null);
+  const handleDestroyCard = (targetPlayer, cardToDestroy, location) => {
+    destroyCard(targetPlayer, cardToDestroy, location);
+    setInspectCard(null); // close inspect if destroyed
+  };
+
+  const handleSacrificeCard = (targetPlayer, cardToSacrifice, location) => {
+    sacrificeCard(targetPlayer, cardToSacrifice, location);
+    setInspectCard(null); // close inspect if sacrificed
+  };
 
   // Bot Turn Effect
   useEffect(() => {
@@ -174,42 +87,34 @@ export default function GameBoard() {
     }
   }, [turnState, winner, loading]);
 
-  // --- Bot Actions (Placeholder for Step 1) ---
+  // --- Bot Actions ---
   const handleBotTurn = () => {
-    // Simple bot logic for Step 1
     if (turnState.phase === 'beginning') {
       advancePhase();
     } else if (turnState.phase === 'draw') {
       drawCard('bot');
       advancePhase();
     } else if (turnState.phase === 'action') {
-      // Try to play a unicorn if it has one
-      const unicornIndex = bot.hand.findIndex(c => c.type.includes('Unicorn'));
-      if (unicornIndex >= 0) {
-        const cardToPlay = bot.hand[unicornIndex];
-        setBot(prev => {
-           const newHand = [...prev.hand];
-           newHand.splice(unicornIndex, 1);
-           return { ...prev, hand: newHand, stable: [...prev.stable, cardToPlay] };
-        });
+
+      const gameState = useGameStore.getState();
+      const decision = evaluateBotAction(gameState);
+
+      if (decision.action === 'play') {
+        playCard('bot', decision.card);
       } else {
-        drawCard('bot'); // Draw if no unicorn
+        drawCard('bot');
       }
+
       advancePhase();
     } else if (turnState.phase === 'end') {
       // Discard randomly if over 7
-      if (bot.hand.length > 7) {
-        setBot(prev => {
-          const cardsToDiscardCount = prev.hand.length - 7;
-          const newHand = [...prev.hand];
-          const newDiscard = [...discardPile];
-          for(let i=0; i < cardsToDiscardCount; i++) {
-             const discarded = newHand.pop();
-             newDiscard.push(discarded);
-          }
-          setDiscardPile(newDiscard);
-          return { ...prev, hand: newHand };
-        });
+      const botHand = useGameStore.getState().bot.hand;
+      if (botHand.length > 7) {
+        const cardsToDiscardCount = botHand.length - 7;
+        for (let i = 0; i < cardsToDiscardCount; i++) {
+           const discarded = botHand[botHand.length - 1 - i]; // Simple pop from end
+           discardCard('bot', discarded);
+        }
       }
       advancePhase();
     }
@@ -235,11 +140,22 @@ export default function GameBoard() {
               )}
             </div>
 
-            <div className="bg-gray-900 p-4 rounded-lg border border-gray-700 shadow-inner flex-1">
+            <div className="bg-gray-900 p-4 rounded-lg border border-gray-700 shadow-inner flex-1 mb-4">
               <h3 className="font-bold text-gray-300 mb-2 border-b border-gray-700 pb-1">Effect / Rules</h3>
               <p className="text-base text-gray-200 leading-relaxed whitespace-pre-wrap">
                 {inspectCard.effectText || "ไม่มีผลอะไร"}
               </p>
+            </div>
+
+            {/* Test Actions for Step 2 Architecture */}
+            <div className="flex flex-col gap-2">
+               {/* Check if it's in player's stable/upgrades/downgrades */}
+               {player.stable.find(c => c.instanceId === inspectCard.instanceId) && (
+                 <>
+                   <button onClick={() => handleSacrificeCard('player', inspectCard, 'stable')} className="px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded font-bold text-white transition">Sacrifice</button>
+                   <button onClick={() => handleDestroyCard('player', inspectCard, 'stable')} className="px-3 py-2 bg-red-600 hover:bg-red-500 rounded font-bold text-white transition">Destroy (by opponent)</button>
+                 </>
+               )}
             </div>
           </>
         ) : (
@@ -257,7 +173,7 @@ export default function GameBoard() {
         <div className="h-[30vh] border-b border-slate-700 p-2 flex flex-col justify-between">
            <div className="flex justify-between items-center text-xs text-red-400 px-4">
               <div className="font-bold">Bot's Hand ({bot.hand.length})</div>
-              <div className="font-bold">Stable: {bot.stable.length}/7</div>
+              <div className="font-bold">Stable: {bot.stable.length}/7 {modifiers.bot.unicornsAreCats && "(CATS!)"}</div>
            </div>
 
            {/* Bot Hand (Hidden, fanned slightly) */}
@@ -382,6 +298,7 @@ export default function GameBoard() {
 
           {/* Nursery */}
           <div className="h-[15vh] aspect-[5/7] bg-pink-900 rounded-md shadow-md border-2 border-pink-500 flex flex-col items-center justify-center font-bold text-xs text-pink-200">
+             <div className="mb-1 text-2xl">🦄</div>
              Nursery<br/>({nursery.length})
           </div>
         </div>
@@ -391,7 +308,7 @@ export default function GameBoard() {
 
            {/* Player Field Info */}
            <div className="flex justify-between items-center text-xs text-blue-400 px-4 pt-2">
-              <div className="font-bold">Player Field: {player.stable.length}/7 (Stable)</div>
+              <div className="font-bold">Player Field: {player.stable.length}/7 (Stable) {modifiers.player.unicornsAreCats && "(CATS!)"}</div>
               <div className={`font-bold ${player.hand.length > 7 ? 'text-red-500' : ''}`}>
                  Hand: {player.hand.length} {player.hand.length > 7 && "(Must Discard)"}
               </div>
